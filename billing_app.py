@@ -2,76 +2,104 @@ import streamlit as st
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
-#connect spread sheet
+
+
+# ----------------------------
+# GOOGLE SHEETS CONNECTION
+# ----------------------------
+
 scope = [
-"https://www.googleapis.com/auth/spreadsheets",
-"https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
 ]
 
 creds = Credentials.from_service_account_file(
-"credentials.json",
-scopes=scope
+    "credentials.json",
+    scopes=scope
 )
 
 client = gspread.authorize(creds)
 
 spreadsheet = client.open_by_key(
-"1pZ9fAhib8oP12GFyhZ6OCUjkTvzcH23o3E8Ap4eR5sU"
+    "1pZ9fAhib8oP12GFyhZ6OCUjkTvzcH23o3E8Ap4eR5sU"
 )
 
 products_sheet = spreadsheet.worksheet("Products")
 sales_sheet = spreadsheet.worksheet("Sales")
 
-#Load Products
+
+# ----------------------------
+# LOAD PRODUCTS
+# ----------------------------
+
 products_data = products_sheet.get_all_records()
 products_df = pd.DataFrame(products_data)
 
-#Billing Interface
-st.title("Electrical Shop Billing")
+
+# ----------------------------
+# STREAMLIT UI
+# ----------------------------
+
+st.title("Electrical Shop Billing System")
 
 product = st.selectbox(
-"Select Product",
-products_df["Product_Name"]
+    "Select Product",
+    products_df["Product_Name"]
 )
 
 row = products_df[products_df["Product_Name"] == product]
 
 price = row["Selling_Price"].values[0]
 
+stock = row["Stock"].values[0]
+
+st.write(f"Price: {price}")
+st.write(f"Stock Available: {stock}")
+
 quantity = st.number_input("Quantity", min_value=1)
 
-payment_type = st.selectbox("Payment Type", ["Cash","Credit"])
+payment_type = st.selectbox(
+    "Payment Type",
+    ["Cash", "Credit"]
+)
 
 total = price * quantity
 
-st.write("Total:", total)
+st.subheader(f"Total: {total}")
 
-#Save Sale
+
+# ----------------------------
+# GENERATE BILL
+# ----------------------------
+
 if st.button("Generate Bill"):
 
-    # find product row index
     product_row_index = products_df[
         products_df["Product_Name"] == product
     ].index[0]
 
-    # get current stock
     current_stock = row["Stock"].values[0]
 
-    # calculate new stock
+    # STOCK VALIDATION
+    if quantity > current_stock:
+        st.error("Not enough stock available")
+        st.stop()
+
     new_stock = current_stock - quantity
 
-    # update stock in Products sheet
+    # UPDATE STOCK
     products_sheet.update_cell(
         product_row_index + 2,
         3,
         new_stock
     )
 
-    # generate invoice number
+    # GENERATE INVOICE NUMBER
     sales_data = sales_sheet.get_all_records()
+
     invoice_number = f"INV{len(sales_data)+1:03d}"
 
-    # save sale
+    # SAVE SALE
     sales_sheet.append_row([
         invoice_number,
         pd.Timestamp.now().strftime("%Y-%m-%d"),
@@ -84,20 +112,3 @@ if st.button("Generate Bill"):
     ])
 
     st.success(f"Bill {invoice_number} created successfully")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
